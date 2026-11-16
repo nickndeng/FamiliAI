@@ -141,3 +141,34 @@ describe('TeamSnap web app, signed in (from the 2026-11-13 page report)', () => 
     expect(status.actions.search.available).toBe(false);
   });
 });
+
+describe('claude.ai signed in (from the 2026-11-15 page report)', () => {
+  const signedIn = `<aside aria-label="Sidebar"><div data-testid="sidebar">
+      <a href="/new">New</a>
+      <button class="w-full">Search⌘CommandK</button>
+      <button data-testid="user-menu-button"><span role="img" aria-label="Alex Rivera"></span></button>
+    </div></aside>`;
+
+  it('uses the sidebar Search button and hides Log in', () => {
+    document.body.innerHTML = signedIn;
+    const status = computeStatusForTest('claude.ai');
+    expect(status.actions.search).toEqual({ available: true, builtin: true });
+    expect(status.actions.account).toEqual({ available: true, builtin: true });
+    expect(status.actions.logout).toEqual({ available: true, builtin: true });
+    expect(status.actions.login.available).toBe(false);
+  });
+
+  it('opens search and focuses the dialog input', async () => {
+    document.body.innerHTML = signedIn;
+    document.querySelector('button.w-full')!.addEventListener('click', () => {
+      setTimeout(() => document.body.insertAdjacentHTML('beforeend', `<div role="dialog"><input placeholder="Search chats and projects" /></div>`), 20);
+    });
+    const { resolveMapping } = await import('../src/content/mappings');
+    const { runAction } = await import('../src/content/executor');
+    const result = await runAction(resolveMapping('claude.ai').actions.search.spec, {
+      doc: document, href: 'https://claude.ai/new', navigate: () => {}, pollIntervalMs: 5,
+    });
+    expect(result).toMatchObject({ ok: true, strategyIndex: 0 });
+    expect((document.activeElement as HTMLInputElement).placeholder).toBe('Search chats and projects');
+  });
+});

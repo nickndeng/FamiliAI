@@ -192,22 +192,41 @@ const teamsnap: SiteMapping = {
 };
 
 // ---------------------------------------------------------------- claude.ai (app)
-const CLAUDE_USER_MENU = ["[data-testid='user-menu-button']"]; // unverified
+// Signed-in sidebar verified from a user page report on 2026-11-15: user menu button
+// [data-testid="user-menu-button"], a "Search ⌘K" button in [data-testid="sidebar"], and
+// New chat links to /new. The search dialog's input is not in the report, so its selectors
+// are generic dialog fallbacks.
+const CLAUDE_USER_MENU = ["[data-testid='user-menu-button']"]; // verified
 const CLAUDE_LOGOUT = ["[role='menuitem']:has-text('Log out')", ":has-text('Log out')"]; // unverified
-const CLAUDE_SEARCH_INPUT = ["input[placeholder*='Search' i]"]; // unverified
+// Verified by the user on 2026-11-15. The button's text starts with an invisible glyph, which
+// normalizeText() strips before matching.
+const CLAUDE_SEARCH_BUTTON = ["[data-testid='sidebar'] button:has-text('Search')"];
+const CLAUDE_SEARCH_INPUT = [
+  "[role='dialog'] input:not([type='hidden']):not([type='file'])",
+  "[role='dialog'] [role='combobox']",
+  "[role='dialog'] [contenteditable='true']",
+  "input[placeholder*='search' i]",
+];
 
 const claudeApp: SiteMapping = {
   hosts: ['claude.ai'],
-  version: 1,
+  version: 2,
   actions: {
     home: {
       strategies: [
-        { steps: [{ op: 'click', selector: ["a[href='/new']", "a[aria-label='New chat']"] }] },
+        { steps: [{ op: 'click', selector: ["a[href='/new']", "a[aria-label='New chat']"] }] }, // verified
         { steps: [{ op: 'navigate', url: '/new' }] },
       ],
     },
     search: {
       strategies: [
+        {
+          steps: [
+            { op: 'click', selector: CLAUDE_SEARCH_BUTTON },
+            { op: 'waitFor', selector: CLAUDE_SEARCH_INPUT, timeoutMs: 3000 },
+            { op: 'focus', selector: CLAUDE_SEARCH_INPUT },
+          ],
+        },
         {
           steps: [
             { op: 'click', selector: ["a[href='/recents']"] },
@@ -217,8 +236,12 @@ const claudeApp: SiteMapping = {
         },
       ],
     },
-    account: { strategies: [{ steps: [{ op: 'click', selector: CLAUDE_USER_MENU }] }] },
-    login: { strategies: [{ steps: [{ op: 'click', selector: ["a[href*='/login']", ":has-text('Log in')"] }] }] },
+    account: { strategies: [{ steps: [{ op: 'click', selector: CLAUDE_USER_MENU }] }] }, // verified
+    login: {
+      strategies: [
+        { excludes: CLAUDE_USER_MENU, steps: [{ op: 'click', selector: ["a[href*='/login']", ":has-text('Log in')"] }] },
+      ],
+    },
     logout: {
       strategies: [
         {

@@ -50,3 +50,11 @@ describe('background registration', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('related domains', () => {
+  it('enables claude.com and claude.ai together, since claude.com redirects to the app', () => {
+    expect(enablePatterns('claude.com')).toEqual(['*://*.claude.com/*', '*://*.claude.ai/*']);
+    expect(enablePatterns('claude.ai')).toEqual(['*://*.claude.ai/*', '*://*.claude.com/*']);
+    expect(describePattern('*://*.claude.ai/*')).toBe('claude.ai and its subdomains');
+  });
+});

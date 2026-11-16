@@ -52,3 +52,11 @@ describe('resolve', () => {
     expect(resolve(["input[name='q']"])?.element.id).toBe('deep');
   });
 });
+
+describe('invisible characters in labels', () => {
+  it('matches text that starts with an icon-font glyph or zero-width space', () => {
+    document.body.innerHTML = `<button id="a">Search⌘CommandK</button><button id="b">​Log out</button>`;
+    expect(resolve([":has-text('Search')"])?.element.id).toBe('a');
+    expect(resolve([":has-text('Log out')"])?.element.id).toBe('b');
+  });
+});

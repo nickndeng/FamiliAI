@@ -73,3 +73,57 @@ describe('report data minimization', () => {
     expect(report.elements.find((e) => e.href === '/team/set_team/1')).toBeDefined(); // structure kept
   });
 });
+
+describe('repeated user-content rows', () => {
+  it('omits labels and text of list rows such as chat titles, but keeps controls', () => {
+    const rows = ['Health checkup results', 'Ski trip plan', 'Family movie picks', 'Tax questions', 'Car charging']
+      .map((t, i) => `<div class="row"><a href="/chat/${i}">${t}</a><button aria-label="More options for ${t}"></button></div>`)
+      .join('');
+    document.body.innerHTML = `<aside><div data-testid="sidebar">
+        <button class="nav">Search⌘K</button>
+        <div data-testid="sidebar-recents">${rows}</div>
+        <button data-testid="user-menu-button" aria-label="Open user menu"></button>
+      </div></aside>`;
+    const report = pageReport(document, resolveMapping('example.org'), 'https://example.org/');
+    const json = JSON.stringify(report);
+    for (const secret of ['Health checkup', 'Ski trip', 'Family movie', 'Tax questions', 'Car charging']) expect(json).not.toContain(secret);
+    expect(report.elements.find((e) => e.href === '/chat/0')).toMatchObject({ repeated: true });
+    expect(json).toContain('Search⌘K');
+    expect(json).toContain('Open user menu');
+  });
+});
+
+describe('canaries: claude.ai-like sidebar with grouped recents', () => {
+  it('never leaks chat titles, project names or the user name', () => {
+    const group = (titles: string[]) =>
+      `<div class="group">${titles.map((t, i) => `<div id="row-${t.length}-${i}"><a href="/chat/${i}">${t}</a><button aria-label="More options for ${t}"></button></div>`).join('')}</div>`;
+    document.body.innerHTML = `<aside aria-label="Sidebar"><div data-testid="sidebar">
+        <button class="nav">Search⌘CommandK</button>
+        <div data-testid="sidebar-recents">
+          ${group(['示例化验报告解读', '虚构城市滑雪计划'])}
+          ${group(['示例汽车补贴活动'])}
+          ${group(['U10 Example FC 比赛视频', '虚构投资周报', '示例海外包裹'])}
+        </div>
+        <a aria-label="Secret Project Name" href="/project/1">Secret Project Name</a>
+        <button data-testid="user-menu-button"><span role="img" aria-label="Alex Rivera"></span></button>
+      </div></aside>`;
+    document.title = 'Ski plans for Sam - Claude';
+    const report = pageReport(document, resolveMapping('claude.ai'), 'https://claude.ai/new');
+    const json = JSON.stringify(report);
+    for (const canary of ['化验报告', '虚构城市', '汽车补贴', 'U10 Example', '投资周报', '海外包裹', 'Secret Project', 'Alex Rivera', 'Sam']) {
+      expect(json, canary).not.toContain(canary);
+    }
+    expect(json).toContain('‹text, ');
+    expect(report.actions.search).toMatchObject({ available: true, builtin: true });
+  });
+});
+
+describe('diagnostics', () => {
+  it('explains which selector of each strategy matched', () => {
+    document.body.innerHTML = `<div data-testid="sidebar"><button>Search⌘CommandK</button></div>`;
+    const report = pageReport(document, resolveMapping('claude.ai'), 'https://claude.ai/new');
+    const first = report.diagnostics.search[0]!;
+    expect(first).toMatchObject({ index: 0, source: 'builtin', canStart: true, firstStep: 'click' });
+    expect(first.selectors[0]).toMatchObject({ matched: 1, visible: 1, textMatched: 1 });
+  });
+});

@@ -24,7 +24,7 @@ npm run build        # outputs dist/
 
 ### Reporting a broken button
 
-If a button shows "not on this page" when it shouldn't (for example Account while you're signed in), open the popup on that page and click **Copy page report**. It copies a JSON (JavaScript Object Notation) summary of the page's clickable structure: tags, ids, `aria-label`s, `data-testid`s, link paths, visibility. It never includes input values, password fields or URL query strings, and it keeps free text only for header/navigation and sign-in–related controls (so names in the page body stay out). Paste it into an issue (or to whoever maintains the mapping) to fix the selectors. The same skeleton is what M2 will send to the LLM.
+If a button shows "not on this page" when it shouldn't (for example Account while you're signed in), open the popup on that page and click **Copy page report**. It copies a JSON (JavaScript Object Notation) summary of the page's clickable structure: tags, ids, `aria-label`s, `data-testid`s, link paths, visibility. It never includes input values, password fields or URL query strings. Labels, button text, placeholders and the page title are kept only when they consist entirely of interface words (English or Chinese, `src/shared/ui-vocabulary.ts`); everything else, such as chat titles or people's names, becomes a placeholder like `‹text, 9 chars›`. A `diagnostics` section shows, for every action and strategy, how many elements each selector matched, how many are visible and how many pass the text filter. Paste it into an issue (or to whoever maintains the mapping) to fix the selectors. The same skeleton is what M2 will send to the LLM.
 
 Other scripts:
 
@@ -46,7 +46,7 @@ popup ──(chrome.permissions.request for one site)──► background servic
                        content.js on the page: mapping ─► executor ─► dock (Shadow DOM)
 ```
 
-- **Per-site opt-in.** The extension has no host permissions until you enable a site. Enabling grants the site's registrable domain (`*://*.apple.com/*`, which also matches apple.com). IP addresses, localhost and shared-hosting domains such as `github.io` or `vercel.app` get the exact host only (`src/shared/site-scope.ts`). The background worker keeps a dynamically registered content script in sync with the granted list, excludes identity-provider hosts via `excludeMatches`, and injects into open tabs immediately.
+- **Per-site opt-in.** The extension has no host permissions until you enable a site. Enabling grants the site's registrable domain (`*://*.apple.com/*`, which also matches apple.com). IP addresses, localhost and shared-hosting domains such as `github.io` or `vercel.app` get the exact host only (`src/shared/site-scope.ts`). Products split across two domains are enabled together in one prompt (claude.com redirects to claude.ai, so enabling either covers both). The background worker keeps a dynamically registered content script in sync with the granted list, excludes identity-provider hosts via `excludeMatches`, and injects into open tabs immediately.
 - **Mappings are data, not code.** Each site mapping is JSON in a small DSL (Domain-Specific Language) validated by `src/shared/dsl.ts`. Only five operations exist — `click`, `hover`, `focus`, `waitFor`, `navigate` (same-origin paths only) — so nothing is ever `eval`'d. The same validator will gate LLM output in M2.
 - **Strategies with fallbacks.** Each action has ranked strategies. A strategy runs when its optional `requires` precondition is present in the DOM (Document Object Model), none of its optional `excludes` is visible (for example, Log in is vetoed while a signed-in avatar shows), and its first step resolves to a visible element. Built-in strategies come first; generic heuristics (`src/content/heuristics.ts`) are appended after them.
 - **Selectors.** Each step takes a ranked list of CSS selectors. A `:has-text('Sign out')` suffix filters by visible text, `aria-label`, `aria-labelledby` or `title` (exact match first, then a short label that starts with the text, such as "Sign in with Google"). Open shadow roots are searched when the light DOM has no match.
@@ -109,7 +109,7 @@ Selectors marked `verified` in `src/mappings/builtin.ts` were observed in the li
 | github.com | ✅ | ✅ verified end-to-end | ✅ signed in | ✅ (hidden while signed in) | ✅ signed in |
 | apple.com | ☐ | ☐ (selectors verified) | ☐ (bag flyout verified) | ☐ (bag flyout verified) | ☐ signed in |
 | teamsnap.com | ✅ | n/a (the app has no search) | ✅ signed in | ✅ (hidden while signed in) | ✅ signed in |
-| claude.com / claude.ai | ☐ | ☐ signed in | ☐ signed in | ☐ (selector verified) | ☐ signed in |
+| claude.com / claude.ai | ✅ | ✅ signed in | ✅ signed in | ✅ (hidden while signed in) | ☐ signed in |
 | chatgpt.com | ☐ | ☐ | ☐ signed in | ☐ (text verified) | ☐ signed in |
 
 The popup shows, per action, whether it is available on the current page and whether the built-in mapping or a heuristic would handle it. Local usage counters are stored under `metrics` in `chrome.storage.local`.

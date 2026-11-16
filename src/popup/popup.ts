@@ -109,8 +109,11 @@ async function initSite(): Promise<void> {
     toggle.disabled = true;
     try {
       // The background worker reacts to permission changes (it injects or removes the dock).
+      // Disabling also removes related domains enabled together (claude.com + claude.ai).
+      const { origins: all = [] } = await chrome.permissions.getAll();
+      const toRemove = [...new Set([...granted, ...requested.filter((p) => all.includes(p))])];
       const changed = enabled
-        ? await chrome.permissions.remove({ origins: granted })
+        ? await chrome.permissions.remove({ origins: toRemove })
         : await chrome.permissions.request({ origins: requested });
       if (changed) {
         window.close();

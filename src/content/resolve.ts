@@ -23,8 +23,17 @@ export function parseSelector(selector: string): ParsedSelector {
   return { css: css === '' ? INTERACTIVE : css, text: match[3] ?? '' };
 }
 
+/**
+ * Lowercased, whitespace-collapsed text without zero-width or private-use characters (icon-font
+ * glyphs) and without leading symbols, so "\uE900Search⌘K" still starts with "search".
+ */
 export function normalizeText(value: string | null | undefined): string {
-  return (value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+  return (value ?? '')
+    .replace(/[\u200B-\u200D\u2060\uFEFF\uE000-\uF8FF]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^[^\p{L}\p{N}]+/u, '')
+    .toLowerCase();
 }
 
 function labelledByText(el: Element): string {
@@ -143,4 +152,29 @@ export function resolve(selectors: readonly string[], root: Document | ShadowRoo
     }
   }
   return null;
+}
+
+export interface SelectorDiagnosis {
+  selector: string;
+  /** Elements matching the CSS part (light DOM plus open shadow roots). */
+  matched: number;
+  visible: number;
+  /** Visible elements that also pass the :has-text filter (equals `visible` when there is none). */
+  textMatched: number;
+  invalid?: true;
+}
+
+/** Explains why a selector does or does not resolve; used by page reports. */
+export function diagnoseSelector(selector: string, root: Document | ShadowRoot = document): SelectorDiagnosis {
+  const parsed = parseSelector(selector);
+  let all: Element[];
+  try {
+    all = Array.from(root.querySelectorAll(parsed.css));
+    for (const shadow of shadowRoots(root)) all.push(...Array.from(shadow.querySelectorAll(parsed.css)));
+  } catch {
+    return { selector, matched: 0, visible: 0, textMatched: 0, invalid: true };
+  }
+  const visible = all.filter(isVisible);
+  const textMatched = parsed.text === undefined ? visible : filterByText(visible, parsed.text);
+  return { selector, matched: all.length, visible: visible.length, textMatched: textMatched.length };
 }

@@ -1,6 +1,6 @@
 {
   "name": "familiai",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Every website, instantly familiar. A fixed dock for Home, Search, Account, Login and Logout on every site.",
   "type": "module",

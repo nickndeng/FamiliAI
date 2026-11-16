@@ -8,9 +8,10 @@
  * (query strings and fragments can carry tokens); text is trimmed.
  */
 import { ACTION_IDS, type ActionId } from '../shared/dsl';
-import { findStrategy, type VetoLatch } from './executor';
+import { canStart, findStrategy, type VetoLatch } from './executor';
 import type { ResolvedMapping } from './mappings';
-import { isVisible } from './resolve';
+import { diagnoseSelector, isVisible, type SelectorDiagnosis } from './resolve';
+import { redactUnlessUi } from '../shared/ui-vocabulary';
 
 const CANDIDATES = [
   'a[href]', 'button', 'summary', '[role="button"]', '[role="menuitem"]', '[role="link"]', '[role="tab"]',
@@ -40,8 +41,20 @@ export interface ReportElement {
   placeholder?: string;
   visible: boolean;
   inHeader: boolean;
+  /** Part of a repeated list of user content (chats, teams, results); its labels and text are omitted. */
+  repeated?: boolean;
   inShadow: boolean;
   hasImage: boolean;
+}
+
+export interface StrategyDiagnosis {
+  index: number;
+  source: 'builtin' | 'heuristic';
+  canStart: boolean;
+  requiresPresent?: boolean;
+  excludedNow?: boolean;
+  firstStep: string;
+  selectors: SelectorDiagnosis[];
 }
 
 export interface PageReport {
@@ -51,6 +64,8 @@ export interface PageReport {
   viewport: { width: number; height: number };
   mappingSource: string;
   actions: Record<ActionId, { available: boolean; strategyIndex: number; builtin: boolean }>;
+  /** Per action and strategy: why its first step does or does not resolve. */
+  diagnostics: Record<ActionId, StrategyDiagnosis[]>;
   elements: ReportElement[];
 }
 
@@ -79,6 +94,25 @@ function collect(root: Document | ShadowRoot, out: Element[], shadows: ShadowRoo
   }
 }
 
+const signature = (el: Element) => `${el.tagName}.${typeof el.className === 'string' ? el.className : ''}`;
+
+/**
+ * True when the element (or one of its two nearest ancestors) is one of 4+ look-alike siblings:
+ * the shape of user-content lists such as chat histories, team rosters and search results.
+ */
+export function isRepeatedItem(el: Element): boolean {
+  let node: Element | null = el;
+  for (let depth = 0; node && depth < 3; depth += 1, node = node.parentElement) {
+    const parent: Element | null = node.parentElement;
+    if (!parent) break;
+    const sig = signature(node);
+    let same = 0;
+    for (const child of Array.from(parent.children)) if (signature(child) === sig) same += 1;
+    if (same >= 4) return true;
+  }
+  return false;
+}
+
 function describe(el: Element, base: string, inShadow: boolean): ReportElement {
   const isInput = el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement;
   const item: ReportElement = {
@@ -91,15 +125,24 @@ function describe(el: Element, base: string, inShadow: boolean): ReportElement {
   const set = <K extends keyof ReportElement>(key: K, value: ReportElement[K] | undefined) => {
     if (value !== undefined && value !== '') item[key] = value;
   };
+  // Data minimization by allowlist: labels and text are kept only when they consist entirely of
+  // interface vocabulary ("Search", "Log out", "Hide sidebar"); everything else (chat titles,
+  // people's names, team names) becomes a length-only placeholder. Containers never carry text.
+  const rawLabel = el.getAttribute('aria-label');
+  const rawText = isInput ? '' : (el.textContent ?? '');
+  const repeated = isRepeatedItem(el);
+  if (repeated) item.repeated = true;
+  const interactive = el.matches('a, button, summary, label, [role="button"], [role="menuitem"], [role="link"], [role="tab"], [role="option"]');
+
   set('id', trim(el.id, 80));
   set('role', trim(el.getAttribute('role')));
-  set('ariaLabel', trim(el.getAttribute('aria-label'), 100));
+  set('ariaLabel', redactUnlessUi(trim(rawLabel, 100)));
   set('testId', trim(el.getAttribute('data-testid'), 80));
   set('classes', trim(typeof el.className === 'string' ? el.className : '', 80));
-  if (!el.getAttribute('aria-label')) {
+  if (!rawLabel) {
     const ids = el.getAttribute('aria-labelledby');
     const byText = ids ? ids.split(/\s+/).map((id) => el.ownerDocument.getElementById(id)?.textContent ?? '').join(' ') : '';
-    set('label', trim(byText || el.getAttribute('title')));
+    set('label', redactUnlessUi(trim(byText || el.getAttribute('title'))));
   }
   set('path', ancestorPath(el));
   set('href', safeUrl(el.getAttribute('href'), base));
@@ -107,14 +150,9 @@ function describe(el: Element, base: string, inShadow: boolean): ReportElement {
     // Never the value: only what identifies the field.
     set('type', trim(el.getAttribute('type')));
     set('name', trim(el.getAttribute('name')));
-    set('placeholder', trim(el.getAttribute('placeholder')));
-  } else {
-    // Data minimization: body content (team names, people's names, messages) is not needed to map
-    // auth and navigation controls, so free text is kept only in the header/nav or when it looks
-    // like an auth/menu control. Structure (tag, path, href path) is always kept.
-    const text = trim(el.textContent);
-    const relevant = item.inHeader || KEYWORDS.test(`${text ?? ''} ${el.getAttribute('aria-label') ?? ''} ${el.getAttribute('href') ?? ''}`);
-    if (relevant) set('text', text);
+    set('placeholder', redactUnlessUi(trim(el.getAttribute('placeholder'))));
+  } else if (interactive) {
+    set('text', redactUnlessUi(trim(rawText)));
   }
   return item;
 }
@@ -126,8 +164,7 @@ function segment(el: Element): string {
   if (el.id && !/\d{3,}|^_?R_|:/.test(el.id)) return `#${el.id.slice(0, 40)}`; // skip generated ids
   const role = el.getAttribute('role');
   if (role) return `${tag}[role=${role}]`;
-  const label = el.getAttribute('aria-label');
-  if (label) return `${tag}[aria-label="${label.slice(0, 30)}"]`;
+  // No aria-label in paths: labels can carry user content (e.g. "More options for <chat title>").
   return tag;
 }
 
@@ -180,15 +217,35 @@ export function pageReport(doc: Document, mapping: ResolvedMapping, href: string
     actions[id] = { available: strategyIndex !== -1, strategyIndex, builtin: strategyIndex !== -1 && strategyIndex < builtinCount };
   }
 
+  const diagnostics = {} as PageReport['diagnostics'];
+  for (const id of ACTION_IDS) {
+    const { spec, builtinCount } = mapping.actions[id];
+    diagnostics[id] = spec.strategies.map((strategy, index) => {
+      const first = strategy.steps[0];
+      const selectors = first && first.op !== 'navigate' ? first.selector.map((sel) => diagnoseSelector(sel, doc)) : [];
+      const d: StrategyDiagnosis = {
+        index,
+        source: index < builtinCount ? 'builtin' : 'heuristic',
+        canStart: canStart(strategy, doc, latch),
+        firstStep: first ? (first.op === 'navigate' ? `navigate ${first.url}` : first.op) : '(none)',
+        selectors,
+      };
+      if (strategy.requires) d.requiresPresent = strategy.requires.some((sel) => diagnoseSelector(sel, doc).matched > 0);
+      if (strategy.excludes) d.excludedNow = strategy.excludes.some((sel) => diagnoseSelector(sel, doc).textMatched > 0);
+      return d;
+    });
+  }
+
   const url = new URL(href);
   const view = doc.defaultView;
   return {
     version: 1,
     url: `${url.origin}${url.pathname}`,
-    title: trim(doc.title, 100) ?? '',
+    title: redactUnlessUi(trim(doc.title, 100)) ?? '',
     viewport: { width: view?.innerWidth ?? 0, height: view?.innerHeight ?? 0 },
     mappingSource: mapping.source,
     actions,
+    diagnostics,
     elements: items.slice(0, MAX_ELEMENTS),
   };
 }

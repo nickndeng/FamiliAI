@@ -35,10 +35,20 @@ export function siteDomain(hostname: string): string | null {
   return lastTwo;
 }
 
+/**
+ * Products that span two registrable domains, typically a marketing site that redirects to the
+ * app (claude.com → claude.ai). Enabling either one enables both in a single permission prompt.
+ */
+export const RELATED_DOMAINS: Readonly<Record<string, readonly string[]>> = {
+  'claude.com': ['claude.ai'],
+  'claude.ai': ['claude.com'],
+};
+
 /** Match patterns to request when the user enables FamiliAI on `hostname`. */
 export function enablePatterns(hostname: string): string[] {
   const domain = siteDomain(hostname);
-  return [domain ? `*://*.${domain}/*` : `*://${hostname.toLowerCase()}/*`];
+  if (!domain) return [`*://${hostname.toLowerCase()}/*`];
+  return [domain, ...(RELATED_DOMAINS[domain] ?? [])].map((d) => `*://*.${d}/*`);
 }
 
 export interface PatternHost {

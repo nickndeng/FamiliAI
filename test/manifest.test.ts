@@ -16,7 +16,7 @@ function containedBy(requested: string, declared: string): boolean {
 }
 
 describe('manifest optional host permissions', () => {
-  it.each(['www.apple.com', 'support.apple.com', 'github.com', 'nick.github.io', 'localhost', '192.168.1.10'])(
+  it.each(['www.apple.com', 'support.apple.com', 'github.com', 'claude.com', 'nick.github.io', 'localhost', '192.168.1.10'])(
     'cover what "Enable on this site" requests for %s',
     (host) => {
       for (const pattern of enablePatterns(host)) {
