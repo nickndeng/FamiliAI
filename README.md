@@ -24,7 +24,7 @@ npm run build        # outputs dist/
 
 ### Reporting a broken button
 
-If a button shows "not on this page" when it shouldn't (for example Account while you're signed in), open the popup on that page and click **Copy page report**. It copies a JSON (JavaScript Object Notation) summary of the page's clickable structure: tags, ids, `aria-label`s, `data-testid`s, link paths, visibility. It never includes input values, password fields or URL query strings. Paste it into an issue (or to whoever maintains the mapping) to fix the selectors. The same skeleton is what M2 will send to the LLM.
+If a button shows "not on this page" when it shouldn't (for example Account while you're signed in), open the popup on that page and click **Copy page report**. It copies a JSON (JavaScript Object Notation) summary of the page's clickable structure: tags, ids, `aria-label`s, `data-testid`s, link paths, visibility. It never includes input values, password fields or URL query strings, and it keeps free text only for header/navigation and sign-in–related controls (so names in the page body stay out). Paste it into an issue (or to whoever maintains the mapping) to fix the selectors. The same skeleton is what M2 will send to the LLM.
 
 Other scripts:
 
@@ -108,7 +108,7 @@ Selectors marked `verified` in `src/mappings/builtin.ts` were observed in the li
 |---|---|---|---|---|---|
 | github.com | ✅ | ✅ verified end-to-end | ✅ signed in | ✅ (hidden while signed in) | ✅ signed in |
 | apple.com | ☐ | ☐ (selectors verified) | ☐ (bag flyout verified) | ☐ (bag flyout verified) | ☐ signed in |
-| teamsnap.com | ☐ | heuristic | heuristic | ☐ (selector verified) | heuristic (app is behind a bot check) |
+| teamsnap.com | ✅ | n/a (the app has no search) | ✅ signed in | ✅ (hidden while signed in) | ✅ signed in |
 | claude.com / claude.ai | ☐ | ☐ signed in | ☐ signed in | ☐ (selector verified) | ☐ signed in |
 | chatgpt.com | ☐ | ☐ | ☐ signed in | ☐ (text verified) | ☐ signed in |
 

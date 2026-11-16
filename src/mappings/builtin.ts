@@ -152,15 +152,41 @@ const apple: SiteMapping = {
 };
 
 // ---------------------------------------------------------------- teamsnap.com
-// Marketing site verified. The web app (go.teamsnap.com) sits behind a bot check, so its
-// logged-in UI relies on the generic heuristics until verified by hand.
+// Marketing site (www.teamsnap.com) verified signed out. Web app (go.teamsnap.com) mapped from
+// a user page report on 2026-11-13 and verified by the user on 2026-11-15 (Account and Sign Out
+// both work): header "Account ▾" dropdown linking to
+// accounts.teamsnap.com, with "My Account" and "Sign Out" (/login/signout) items.
+// The app has no search, so Search stays grayed out there.
+const TEAMSNAP_ACCOUNT = [
+  "header a[href^='https://accounts.teamsnap.com']:has-text('My Account')", // verified (dropdown item)
+  "header a.dropdown__title[href^='https://accounts.teamsnap.com']", // verified ("Account ▾")
+];
+const TEAMSNAP_SIGNOUT = ['a.Account-Dropdown__sign-out', "a[href='/login/signout']"]; // verified
+
 const teamsnap: SiteMapping = {
   hosts: ['*.teamsnap.com'],
-  version: 1,
+  version: 2,
   actions: {
     home: { strategies: [{ steps: [{ op: 'navigate', url: '/' }] }] },
+    account: { strategies: [{ steps: [{ op: 'click', selector: TEAMSNAP_ACCOUNT }] }] },
     login: {
-      strategies: [{ steps: [{ op: 'click', selector: ["a[href*='/login/signin']", "a:has-text('Login')"] }] }], // verified
+      strategies: [
+        { excludes: TEAMSNAP_SIGNOUT, steps: [{ op: 'click', selector: ["a[href*='/login/signin']", "a:has-text('Login')"] }] }, // verified
+      ],
+    },
+    logout: {
+      strategies: [
+        { steps: [{ op: 'click', selector: TEAMSNAP_SIGNOUT }] },
+        {
+          // If the dropdown is collapsed, hover the "Account ▾" title to reveal it.
+          requires: TEAMSNAP_SIGNOUT,
+          steps: [
+            { op: 'hover', selector: ["header a.dropdown__title[href^='https://accounts.teamsnap.com']"] },
+            { op: 'waitFor', selector: TEAMSNAP_SIGNOUT, timeoutMs: 2000 },
+            { op: 'click', selector: TEAMSNAP_SIGNOUT },
+          ],
+        },
+      ],
     },
   },
 };

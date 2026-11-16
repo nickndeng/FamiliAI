@@ -109,7 +109,12 @@ function describe(el: Element, base: string, inShadow: boolean): ReportElement {
     set('name', trim(el.getAttribute('name')));
     set('placeholder', trim(el.getAttribute('placeholder')));
   } else {
-    set('text', trim(el.textContent));
+    // Data minimization: body content (team names, people's names, messages) is not needed to map
+    // auth and navigation controls, so free text is kept only in the header/nav or when it looks
+    // like an auth/menu control. Structure (tag, path, href path) is always kept.
+    const text = trim(el.textContent);
+    const relevant = item.inHeader || KEYWORDS.test(`${text ?? ''} ${el.getAttribute('aria-label') ?? ''} ${el.getAttribute('href') ?? ''}`);
+    if (relevant) set('text', text);
   }
   return item;
 }

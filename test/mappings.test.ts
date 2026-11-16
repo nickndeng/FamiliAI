@@ -121,3 +121,23 @@ describe('generic Log in heuristics', () => {
     expect(computeStatusForTest('example.org').actions.login.available).toBe(false);
   });
 });
+
+describe('TeamSnap web app, signed in (from the 2026-11-13 page report)', () => {
+  it('maps Account and Log out, hides Log in, and grays out Search', () => {
+    document.body.innerHTML = `
+      <div id="half-reskin"><header><ul>
+        <a class="dropdown__title" href="https://accounts.teamsnap.com/">Account ▾</a>
+        <ul>
+          <a href="https://accounts.teamsnap.com/">My Account</a>
+          <a href="/account">Billing &amp; Plans</a>
+          <a class="Account-Dropdown__sign-out" href="/login/signout">Sign Out</a>
+        </ul>
+        <a class="dropdown__title" href="/team">My Teams</a>
+      </ul></header><div id="main"><a href="/team/schedule">Go To My Full Schedule</a></div></div>`;
+    const status = computeStatusForTest('go.teamsnap.com');
+    expect(status.actions.account).toEqual({ available: true, builtin: true });
+    expect(status.actions.logout).toEqual({ available: true, builtin: true });
+    expect(status.actions.login.available).toBe(false);
+    expect(status.actions.search.available).toBe(false);
+  });
+});

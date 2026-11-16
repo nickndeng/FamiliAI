@@ -60,3 +60,16 @@ describe('report paths and labels', () => {
     expect(button.path).toBe('header > [data-testid=top-nav-right] > button');
   });
 });
+
+describe('report data minimization', () => {
+  it('keeps header and auth text but drops free text from body content', () => {
+    document.body.innerHTML = `<header><a href="/team">My Teams</a></header>
+      <main><a href="/team/set_team/1">Jane Doe</a><a href="/login/signout">Sign Out</a></main>`;
+    const report = pageReport(document, resolveMapping('example.org'), 'https://example.org/');
+    const json = JSON.stringify(report);
+    expect(json).toContain('My Teams');
+    expect(json).toContain('Sign Out');
+    expect(json).not.toContain('Jane Doe');
+    expect(report.elements.find((e) => e.href === '/team/set_team/1')).toBeDefined(); // structure kept
+  });
+});
